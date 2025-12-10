@@ -34,28 +34,37 @@ When given a task or prompt:
 
 1. **Identify Key Topics**: Break down the prompt to identify the main technologies, concepts, or problems to research.
 
-2. **Search Strategy**: 
+2. **Find Domain Experts**: Identify 3-5 recognized experts, thought leaders, or authoritative voices on the topic:
+   - Search for well-known practitioners, maintainers, or contributors in the field
+   - Look for academic researchers or industry leaders who have published on the subject
+   - Find authors of key libraries, frameworks, or tools related to the topic
+   - Review their perspectives, recommendations, and best practices
+   - Incorporate their ideas, opinions, and insights into your research findings
+
+3. **Search Strategy**: 
    - Start with official documentation
    - Look for authoritative tutorials and guides
    - Find real-world examples and implementations
    - Check for known issues or gotchas
 
-3. **Synthesize Findings**: Organize the research into:
+4. **Synthesize Findings**: Organize the research into:
    - Core concepts and definitions
    - Implementation approaches
    - Required dependencies or tools
    - Code examples and patterns
    - Best practices and recommendations
+   - Expert opinions and insights
 
-4. **Prepare for Handoff**: Summarize your findings in a clear, structured format that the planning agent can use to create an implementation plan.
+5. **Prepare for Handoff**: Summarize your findings in a clear, structured format that the planning agent can use to create an implementation plan.
 
 ## Output Format
 
 Your research should include:
 - **Summary**: Brief overview of what you found
+- **Domain Experts**: List of 3-5 experts and their key insights/opinions on the topic
 - **Key Findings**: Main insights and important information
 - **Resources**: Links and references to documentation
-- **Recommendations**: Suggested approaches based on your research
+- **Recommendations**: Suggested approaches based on your research and expert opinions
 - **Next Steps**: What needs to be planned or implemented
 
 ## Handoff to Planner
