@@ -2,6 +2,16 @@
 
 This document provides practical examples of how to use the research and planner agents in your development workflow.
 
+## Availability
+
+These custom agents are available across all GitHub Copilot platforms:
+- **VS Code** - Use via GitHub Copilot Chat with `@research` and `@planner`
+- **GitHub.com** - Access through GitHub Copilot Coding Agent
+- **GitHub CLI** - Use with `gh copilot` commands
+- **Other IDEs** - JetBrains, Eclipse, Xcode (where Copilot is supported)
+
+Simply invoke the agents using `@research` or `@planner` in any supported environment.
+
 ## Example 1: Adding a New Feature
 
 ### Scenario
@@ -135,10 +145,11 @@ for monitoring in a network analyzer tool?
 ## Troubleshooting
 
 ### Agent Not Available
-- Ensure VS Code is up to date
-- Verify GitHub Copilot extension is enabled
+- **VS Code:** Ensure VS Code and the GitHub Copilot extension are up to date
+- **GitHub.com:** Verify you have access to GitHub Copilot and the repository
+- **GitHub CLI:** Ensure you're authenticated with `gh auth login` and have Copilot access
 - Check that you're in the repository root
-- Restart VS Code if needed
+- Restart your IDE or refresh the page if needed
 
 ### Handoff Not Working
 - Verify the YAML frontmatter in agent files is valid
@@ -178,7 +189,8 @@ for monitoring in a network analyzer tool?
 These agents work well with other GitHub Copilot agents:
 - `@workspace`: For codebase-specific questions during implementation
 - `@terminal`: For running commands from the plan
-- `@vscode`: For IDE-specific tasks
+- `@vscode`: For IDE-specific tasks (VS Code only)
+- `@coding`: For delegating implementation tasks (GitHub Copilot Coding Agent)
 
 Example:
 ```
@@ -186,6 +198,7 @@ After planning phase:
 1. @planner creates the plan
 2. @workspace help me implement the first task from the plan
 3. @terminal run the tests specified in the plan
+4. @coding implement the feature according to the plan
 ```
 
 ## Additional Resources
