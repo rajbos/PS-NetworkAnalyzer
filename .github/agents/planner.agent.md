@@ -2,7 +2,6 @@
 name: "planner"
 description: "Planning agent that creates detailed implementation plans with step-by-step tasks based on research findings and requirements."
 tools: ["read", "search", "list_files", "web_search"]
-target: "vscode"
 ---
 
 # Planner Agent
