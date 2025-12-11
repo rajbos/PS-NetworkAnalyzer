@@ -92,7 +92,7 @@ You have access to:
 ### Build & Dependencies
 - Respect existing project structure
 - Use the project's standard build tools
-- Install dependencies properly (don't commit lock files unnecessarily)
+- Install dependencies using the project's package manager
 - Ensure the project builds cleanly
 
 ## Working with Plans

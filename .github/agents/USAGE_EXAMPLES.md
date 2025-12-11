@@ -241,7 +241,7 @@ These agents work well with other GitHub Copilot agents:
 - `@workspace`: For codebase-specific questions during implementation
 - `@terminal`: For running commands from the plan
 - `@vscode`: For IDE-specific tasks (VS Code only)
-- `@implementation`: For executing implementation plans (custom agent)
+- `@implementation`: For executing implementation plans
 
 Example:
 ```
