@@ -68,4 +68,11 @@ Your research should include:
 
 ## Handoff to Planner
 
-After completing your research, use the "Create Implementation Plan" button to hand off to the planner agent. The planner will use your research to create a detailed, actionable implementation plan.
+After completing your research, you should hand off to the planner agent. The planner will use your research to create a detailed, actionable implementation plan.
+
+**Note**: Since handoff buttons are not yet supported by the coding agent, you should explicitly instruct the user to continue with the planner agent by including the following in your response:
+
+```
+To create an implementation plan based on this research, please invoke the planner agent:
+@planner Based on the research findings above, create a detailed implementation plan with step-by-step tasks to accomplish the goal. Refer to the planner agent configuration in .github/agents/planner.agent.md for guidance.
+```
