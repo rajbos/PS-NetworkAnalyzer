@@ -31,7 +31,9 @@ What libraries and approaches are available?
 - Code examples and patterns
 
 ### Step 2: Planning Phase
-After the research agent completes, click the **"Create Implementation Plan"** button.
+After the research agent completes, follow the instructions in its output to invoke the planner agent. The research agent will provide you with the exact command to use.
+
+**Note**: Handoff buttons are not yet fully supported by the coding agent, so you'll need to manually invoke the next agent using the `@planner` command provided in the research output.
 
 **Expected Planning Output:**
 - Prerequisites (required libraries, permissions)
@@ -41,7 +43,9 @@ After the research agent completes, click the **"Create Implementation Plan"** b
 - Potential challenges and mitigation
 
 ### Step 3: Implementation Phase
-After the planner agent completes, click the **"Start Implementation"** button.
+After the planner agent completes, follow the instructions in its output to invoke the implementation agent. The planner agent will provide you with the exact command to use.
+
+**Note**: Similarly, you'll need to manually invoke the implementation agent using the `@implementation` command provided in the planner output.
 
 **Expected Implementation Output:**
 - Code changes written to the repository
@@ -62,14 +66,14 @@ What are the breaking changes and migration steps?
 ```
 
 ### Step 2: Planning
-The handoff automatically includes your research context:
+Use the `@planner` command provided in the research output to continue:
 - Breaking changes identified
 - Migration path outlined
 - Testing requirements specified
 - Rollback strategy included
 
 ### Step 3: Implementation
-Click **"Start Implementation"** to execute the migration:
+Use the `@implementation` command provided in the planner output to execute the migration:
 - Code changes applied automatically
 - Tests run to verify migration
 - Issues debugged and resolved
@@ -87,13 +91,14 @@ when processing large network data sets?
 ```
 
 ### Planning Result
+Use the provided `@planner` command to create a plan:
 - Profiling approach
 - Optimization techniques prioritized by impact
 - Implementation order based on dependencies
 - Benchmarking strategy
 
 ### Implementation Execution
-The implementation agent applies optimizations:
+Use the provided `@implementation` command to execute optimizations:
 - Code changes implemented
 - Performance benchmarks run
 - Results compared and validated
@@ -148,7 +153,7 @@ The implementation agent applies optimizations:
 
 #### For Implementation Agent
 1. **Trust the Plan**: Let it execute the plan from the planner
-   - ✅ Use the handoff button for smooth workflow
+   - ✅ Use the `@implementation` command provided by the planner
 
 2. **Monitor Progress**: Review what it's doing as it implements
    - ✅ Check commit messages and test results
@@ -162,16 +167,16 @@ The implementation agent applies optimizations:
 The complete workflow for complex tasks:
 
 1. Initial research: `@research [broad topic]`
-2. Create initial plan (handoff to planner)
+2. Use the `@planner` command from research output to create initial plan
 3. Review plan and refine if needed
-4. Start implementation (handoff to implementation agent)
+4. Use the `@implementation` command from planner output to start implementation
 5. Monitor progress and provide guidance as needed
 
 ### Research → Plan → Research Cycle
 Sometimes you need to iterate before implementing:
 
 1. Initial research: `@research [broad topic]`
-2. Create initial plan (handoff)
+2. Use the `@planner` command to create initial plan
 3. Identify knowledge gaps in plan
 4. Follow-up research: `@research [specific gap]`
 5. Refine plan with new information
@@ -203,9 +208,11 @@ for monitoring in a network analyzer tool?
 - Restart your IDE or refresh the page if needed
 
 ### Handoff Not Working
+- **Note**: Handoff buttons are not yet fully supported by the coding agent
+- Instead, use the `@agent` commands provided in each agent's output
+- Each agent will provide the exact command to invoke the next agent
 - Verify the YAML frontmatter in agent files is valid
-- Check that both agent files exist in `.github/agents/`
-- Ensure you're clicking the handoff button, not just mentioning the agent
+- Check that all agent files exist in `.github/agents/`
 
 ### Poor Quality Output
 - Provide more context in your prompts
@@ -222,11 +229,11 @@ for monitoring in a network analyzer tool?
    ↓
 2. @research [gather context and documentation]
    ↓
-3. Handoff → @planner [create implementation plan]
+3. Use @planner command from research output
    ↓
 4. Review plan, ask questions if needed
    ↓
-5. Handoff → @implementation [execute the plan]
+5. Use @implementation command from planner output
    ↓
 6. Monitor progress, tests run automatically
    ↓
@@ -247,8 +254,8 @@ Example:
 ```
 Complete automated workflow:
 1. @research [gather information about the task]
-2. Click "Create Implementation Plan" → @planner creates detailed plan
-3. Click "Start Implementation" → @implementation executes the plan
+2. Use @planner command from research output → creates detailed plan
+3. Use @implementation command from planner output → executes the plan
 4. Implementation agent writes code, runs tests, commits changes
 5. Review and merge when complete
 
