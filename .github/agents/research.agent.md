@@ -2,7 +2,6 @@
 name: "research"
 description: "Research agent that gathers documentation, references, and technical information from the internet to analyze tasks and provide comprehensive context."
 tools: ["read", "search", "web_search"]
-target: "vscode"
 handoffs:
   - agent: "planner"
     button: "Create Implementation Plan"
