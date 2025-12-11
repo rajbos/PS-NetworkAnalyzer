@@ -2,6 +2,11 @@
 name: "planner"
 description: "Planning agent that creates detailed implementation plans with step-by-step tasks based on research findings and requirements."
 tools: ["read", "search", "list_files", "web_search"]
+handoffs:
+  - agent: "implementation"
+    button: "Start Implementation"
+    prompt: "Based on the implementation plan above, execute the tasks to accomplish the goal. Follow the plan step-by-step, test your changes, and validate that everything works correctly."
+    send: false
 ---
 
 # Planner Agent
@@ -113,3 +118,14 @@ When you receive findings from the research agent:
 5. Call out any areas where more research might be needed
 
 Your goal is to create a plan that is clear enough for any developer to follow and complete the implementation successfully.
+
+## Handoff to Implementation
+
+After completing your implementation plan, you should hand off to the implementation agent. The implementation agent will execute the plan, write code, run tests, and validate changes.
+
+**Note**: Since handoff buttons are not yet supported by the coding agent, you should explicitly instruct the user to continue with the implementation agent by including the following in your response:
+
+```
+To execute this implementation plan, please invoke the implementation agent:
+@implementation Based on the implementation plan above, execute the tasks to accomplish the goal. Follow the plan step-by-step, test your changes, and validate that everything works correctly. Refer to the implementation agent configuration in .github/agents/implementation.agent.md for guidance.
+```

@@ -31,7 +31,9 @@ What libraries and approaches are available?
 - Code examples and patterns
 
 ### Step 2: Planning Phase
-After the research agent completes, click the **"Create Implementation Plan"** button.
+After the research agent completes, follow the instructions in its output to invoke the planner agent. The research agent will provide you with the exact command to use.
+
+**Note**: Handoff buttons are not yet fully supported by the coding agent, so you'll need to manually invoke the next agent using the `@planner` command provided in the research output.
 
 **Expected Planning Output:**
 - Prerequisites (required libraries, permissions)
@@ -39,6 +41,18 @@ After the research agent completes, click the **"Create Implementation Plan"** b
 - Testing strategy
 - Documentation requirements
 - Potential challenges and mitigation
+
+### Step 3: Implementation Phase
+After the planner agent completes, follow the instructions in its output to invoke the implementation agent. The planner agent will provide you with the exact command to use.
+
+**Note**: Similarly, you'll need to manually invoke the implementation agent using the `@implementation` command provided in the planner output.
+
+**Expected Implementation Output:**
+- Code changes written to the repository
+- Tests executed and validated
+- Build/compilation confirmed successful
+- Documentation updated as needed
+- Summary of what was implemented
 
 ## Example 2: Technology Migration
 
@@ -52,11 +66,18 @@ What are the breaking changes and migration steps?
 ```
 
 ### Step 2: Planning
-The handoff automatically includes your research context:
+Use the `@planner` command provided in the research output to continue:
 - Breaking changes identified
 - Migration path outlined
 - Testing requirements specified
 - Rollback strategy included
+
+### Step 3: Implementation
+Use the `@implementation` command provided in the planner output to execute the migration:
+- Code changes applied automatically
+- Tests run to verify migration
+- Issues debugged and resolved
+- Final validation completed
 
 ## Example 3: Performance Optimization
 
@@ -70,10 +91,18 @@ when processing large network data sets?
 ```
 
 ### Planning Result
+Use the provided `@planner` command to create a plan:
 - Profiling approach
 - Optimization techniques prioritized by impact
 - Implementation order based on dependencies
 - Benchmarking strategy
+
+### Implementation Execution
+Use the provided `@implementation` command to execute optimizations:
+- Code changes implemented
+- Performance benchmarks run
+- Results compared and validated
+- Documentation updated with findings
 
 ## Best Practices
 
@@ -90,6 +119,13 @@ when processing large network data sets?
 - ✅ Planning refactoring efforts
 - ✅ Organizing multi-step work
 - ✅ After receiving research findings
+
+### When to Use Implementation Agent
+- ✅ Executing implementation plans
+- ✅ Writing and modifying code
+- ✅ Running tests and builds
+- ✅ Validating changes work correctly
+- ✅ After receiving a detailed plan
 
 ### Tips for Better Results
 
@@ -115,16 +151,36 @@ when processing large network data sets?
 3. **Define Success**: Clarify what "done" looks like
    - ✅ "Should handle 10,000 packets per second"
 
+#### For Implementation Agent
+1. **Trust the Plan**: Let it execute the plan from the planner
+   - ✅ Use the `@implementation` command provided by the planner
+
+2. **Monitor Progress**: Review what it's doing as it implements
+   - ✅ Check commit messages and test results
+
+3. **Provide Feedback**: If something isn't working, guide adjustments
+   - ✅ "The tests are failing because of X, try Y instead"
+
 ## Advanced Workflows
 
-### Research → Plan → Research Cycle
-Sometimes you need to iterate:
+### Research → Plan → Implement Workflow
+The complete workflow for complex tasks:
 
 1. Initial research: `@research [broad topic]`
-2. Create initial plan (handoff)
+2. Use the `@planner` command from research output to create initial plan
+3. Review plan and refine if needed
+4. Use the `@implementation` command from planner output to start implementation
+5. Monitor progress and provide guidance as needed
+
+### Research → Plan → Research Cycle
+Sometimes you need to iterate before implementing:
+
+1. Initial research: `@research [broad topic]`
+2. Use the `@planner` command to create initial plan
 3. Identify knowledge gaps in plan
 4. Follow-up research: `@research [specific gap]`
 5. Refine plan with new information
+6. Start implementation once plan is solid
 
 ### Direct Planning (Skip Research)
 For well-understood tasks:
@@ -152,9 +208,11 @@ for monitoring in a network analyzer tool?
 - Restart your IDE or refresh the page if needed
 
 ### Handoff Not Working
+- **Note**: Handoff buttons are not yet fully supported by the coding agent
+- Instead, use the `@agent` commands provided in each agent's output
+- Each agent will provide the exact command to invoke the next agent
 - Verify the YAML frontmatter in agent files is valid
-- Check that both agent files exist in `.github/agents/`
-- Ensure you're clicking the handoff button, not just mentioning the agent
+- Check that all agent files exist in `.github/agents/`
 
 ### Poor Quality Output
 - Provide more context in your prompts
@@ -171,15 +229,15 @@ for monitoring in a network analyzer tool?
    ↓
 2. @research [gather context and documentation]
    ↓
-3. Handoff → @planner [create implementation plan]
+3. Use @planner command from research output
    ↓
 4. Review plan, ask questions if needed
    ↓
-5. Follow plan to implement
+5. Use @implementation command from planner output
    ↓
-6. Use @workspace or other agents for coding
+6. Monitor progress, tests run automatically
    ↓
-7. Test and validate
+7. Changes committed and validated
    ↓
 8. (Optional) @research [troubleshooting or optimization]
 ```
@@ -190,15 +248,21 @@ These agents work well with other GitHub Copilot agents:
 - `@workspace`: For codebase-specific questions during implementation
 - `@terminal`: For running commands from the plan
 - `@vscode`: For IDE-specific tasks (VS Code only)
-- `@coding`: For delegating implementation tasks (GitHub Copilot Coding Agent)
+- `@implementation`: For executing implementation plans
 
 Example:
 ```
-After planning phase:
+Complete automated workflow:
+1. @research [gather information about the task]
+2. Use @planner command from research output → creates detailed plan
+3. Use @implementation command from planner output → executes the plan
+4. Implementation agent writes code, runs tests, commits changes
+5. Review and merge when complete
+
+Manual workflow (when you want more control):
 1. @planner creates the plan
 2. @workspace help me implement the first task from the plan
 3. @terminal run the tests specified in the plan
-4. @coding implement the feature according to the plan
 ```
 
 ## Additional Resources
