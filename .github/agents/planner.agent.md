@@ -2,6 +2,11 @@
 name: "planner"
 description: "Planning agent that creates detailed implementation plans with step-by-step tasks based on research findings and requirements."
 tools: ["read", "search", "list_files", "web_search"]
+handoffs:
+  - agent: "implementation"
+    button: "Start Implementation"
+    prompt: "Based on the implementation plan above, execute the tasks to accomplish the goal. Follow the plan step-by-step, test your changes, and validate that everything works correctly."
+    send: false
 ---
 
 # Planner Agent
