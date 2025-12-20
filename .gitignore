@@ -1,0 +1,27 @@
+# Scan results
+*.json
+scan-results/
+logs/
+
+# PowerShell temporary files
+*.ps1xml
+
+# Windows thumbnail cache files
+Thumbs.db
+ehthumbs.db
+
+# Folder config file
+Desktop.ini
+
+# Recycle Bin
+$RECYCLE.BIN/
+
+# IDE files
+.vscode/
+.idea/
+*.code-workspace
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
