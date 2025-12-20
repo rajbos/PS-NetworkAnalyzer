@@ -67,11 +67,24 @@ $subnetsToScan = @()
 if ($Subnets) {
     # Parse user-provided subnets
     foreach ($subnet in $Subnets) {
-        if ($subnet -match '^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/(\d{1,2})$') {
-            $subnetsToScan += [PSCustomObject]@{
-                NetworkAddress = $matches[1]
-                PrefixLength = [int]$matches[2]
-                InterfaceAlias = "User-specified"
+        if ($subnet -match '^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})$') {
+            # Validate IP address octets (0-255)
+            $octet1 = [int]$matches[1]
+            $octet2 = [int]$matches[2]
+            $octet3 = [int]$matches[3]
+            $octet4 = [int]$matches[4]
+            $prefix = [int]$matches[5]
+            
+            if ($octet1 -le 255 -and $octet2 -le 255 -and $octet3 -le 255 -and $octet4 -le 255 -and $prefix -le 32) {
+                $ipAddress = "$octet1.$octet2.$octet3.$octet4"
+                $subnetsToScan += [PSCustomObject]@{
+                    NetworkAddress = $ipAddress
+                    PrefixLength = $prefix
+                    InterfaceAlias = "User-specified"
+                }
+            }
+            else {
+                Write-Warning "Invalid subnet: $subnet (octets must be 0-255, prefix must be 0-32)"
             }
         }
         else {

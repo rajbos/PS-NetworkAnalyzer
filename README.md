@@ -161,8 +161,10 @@ The `NetworkAnalyzer.psm1` module provides the following functions that can be u
 
 - The tool performs network scanning which may be logged by network security devices
 - Some firewalls or security software may flag the scanning activity
-- SSL certificate validation is disabled for HTTPS connections to allow scanning of devices with self-signed certificates
+- **IMPORTANT**: SSL certificate validation is disabled globally when checking HTTPS services to allow scanning of devices with self-signed certificates. This is necessary for discovering IoT devices but should only be used on trusted networks.
 - Run with appropriate permissions and only on networks you own or have permission to scan
+- The tool does not perform any authentication or attempt to bypass security measures
+- Scan results may contain sensitive information about your network topology - handle them accordingly
 
 ## Limitations
 

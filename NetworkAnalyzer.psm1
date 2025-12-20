@@ -27,7 +27,9 @@ function Get-LocalSubnets {
         
         # Calculate network address
         $ipBytes = [System.Net.IPAddress]::Parse($ip).GetAddressBytes()
-        $maskBytes = [System.BitConverter]::GetBytes([uint32]([Math]::Pow(2, 32) - [Math]::Pow(2, 32 - $prefixLength)))
+        # Create subnet mask using bitwise operation
+        $maskValue = [uint32](0xFFFFFFFF -shl (32 - $prefixLength))
+        $maskBytes = [System.BitConverter]::GetBytes($maskValue)
         [Array]::Reverse($maskBytes)
         
         $networkBytes = @(0, 0, 0, 0)
@@ -113,7 +115,9 @@ function Get-NetworkHosts {
     $networkBytes = [System.Net.IPAddress]::Parse($NetworkAddress).GetAddressBytes()
     $networkInt = [System.BitConverter]::ToUInt32($networkBytes, 0)
     if ([System.BitConverter]::IsLittleEndian) {
-        $networkInt = [System.Net.IPAddress]::NetworkToHostOrder([int]$networkInt)
+        # Convert to host order, handling uint32 properly
+        [Array]::Reverse($networkBytes)
+        $networkInt = [System.BitConverter]::ToUInt32($networkBytes, 0)
     }
     
     $activeHosts = [System.Collections.Concurrent.ConcurrentBag[string]]::new()
@@ -125,7 +129,11 @@ function Get-NetworkHosts {
     
     for ($i = 1; $i -le $hostCount; $i++) {
         $hostInt = $networkInt + $i
-        $hostBytes = [System.BitConverter]::GetBytes([System.Net.IPAddress]::HostToNetworkOrder([int]$hostInt))
+        # Convert back to bytes in correct order
+        $hostBytes = [System.BitConverter]::GetBytes($hostInt)
+        if ([System.BitConverter]::IsLittleEndian) {
+            [Array]::Reverse($hostBytes)
+        }
         $hostIP = [System.Net.IPAddress]::new($hostBytes).ToString()
         
         $powershell = [powershell]::Create().AddScript({
@@ -276,7 +284,9 @@ function Get-HttpService {
     $url = "${protocol}://${IPAddress}:${Port}"
     
     try {
-        # Ignore SSL certificate errors
+        # Ignore SSL certificate errors for self-signed certificates
+        # SECURITY WARNING: This disables SSL certificate validation globally
+        # Only use this in trusted network environments for device discovery
         if (-not ([System.Management.Automation.PSTypeName]'ServerCertificateValidationCallback').Type) {
             Add-Type @"
                 using System.Net;
