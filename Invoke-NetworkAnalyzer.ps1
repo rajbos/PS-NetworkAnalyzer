@@ -187,43 +187,62 @@ foreach ($subnet in $subnetsToScan) {
         if (-not $SkipPortScan -and $openPorts.Count -gt 0) {
             $endpointResults = @()
             foreach ($port in $openPorts) {
-                if ($port -in @(80, 8080, 8081, 8123, 5000, 9000)) {
-                    $apiEndpoints = Get-ApiEndpoints -IPAddress $ip -Port $port
-                    if ($apiEndpoints.Count -gt 0) {
-                        foreach ($endpoint in $apiEndpoints) {
-                            if ($endpoint.URL -notin $deviceInfo.ApiEndpoints) {
-                                $deviceInfo.ApiEndpoints += $endpoint.URL
-                                $tags = @()
-                                if ($endpoint.IsOpenApi) { $tags += 'OpenAPI' }
-                                if ($endpoint.IsSwaggerUI) { $tags += 'Swagger UI' }
-                                if ($endpoint.IsOnvif) { $tags += 'ONVIF' }
-                                if ($endpoint.IsIgnorableSoapFault) { $tags += 'SOAP Fault ignored' }
-                                $tagStr = if ($tags.Count -gt 0) { ' ' + '[' + ($tags -join ', ') + ']' } else { '' }
-                                $statusStr = if ($endpoint.StatusCode) { " [$($endpoint.StatusCode)]" } else { '' }
-                                $ctypeStr = if ($endpoint.ContentType) { " [$($endpoint.ContentType)]" } else { '' }
-                                Write-Host "            - $($endpoint.URL)$statusStr$ctypeStr$tagStr" -ForegroundColor Gray
+                foreach ($proto in @(@{Port=80; SSL=$false}, @{Port=8080; SSL=$false}, @{Port=8081; SSL=$false}, @{Port=8123; SSL=$false}, @{Port=5000; SSL=$false}, @{Port=9000; SSL=$false}, @{Port=443; SSL=$true}, @{Port=8443; SSL=$true}, @{Port=5001; SSL=$true})) {
+                    if ($port -eq $proto.Port) {
+                        $useSSL = $proto.SSL
+                        # Compose endpoint folder and file base for meta.json
+                        $u = "http" + ($useSSL ? "s" : "") + "://${ip}:$port/"
+                        $testEndpoints = Get-ApiEndpoints -IPAddress $ip -Port $port -UseSSL:$useSSL
+                        foreach ($endpoint in $testEndpoints) {
+                            # Compose endpoint file base
+                            try {
+                                $uri = [uri]$endpoint.URL
+                                $absPath = $uri.AbsolutePath.Trim('/')
+                                $segments = @()
+                                if (-not [string]::IsNullOrWhiteSpace($absPath)) { $segments = $absPath.Split('/') }
+                                $lastSeg = ($segments | Where-Object { $_ -ne '' } | Select-Object -Last 1)
+                                if ([string]::IsNullOrWhiteSpace($lastSeg)) { $lastSeg = 'root' }
+                                $segSan = $lastSeg -replace '[^a-zA-Z0-9._-]', '_'
+                                $fileBase = "${port}_${segSan}"
+                                $deviceDir = Join-Path $outputRoot (("${ip} - " + ($device.DeviceName ? $device.DeviceName + ' - ' : '') + ($device.Hostname ? $device.Hostname : 'Unknown')) -replace '[<>:"/\\|\?\*]', '_')
+                                $epDir = Join-Path $deviceDir 'endpoints'
+                                $metaPath = Join-Path $epDir ($fileBase + '.meta.json')
+                                $shouldScan = $true
+                                if (Test-Path -LiteralPath $metaPath) {
+                                    try {
+                                        $metaObj = Get-Content -Raw -Path $metaPath | ConvertFrom-Json
+                                        if ($metaObj.PSObject.Properties.Match('LastUpdated')) {
+                                            $last = [datetime]::ParseExact($metaObj.LastUpdated, 'yyyy-MM-dd HH:mm:ss', $null)
+                                            if ($last -gt (Get-Date).AddDays(-7)) {
+                                                $shouldScan = $false
+                                            }
+                                        }
+                                    } catch {}
+                                }
+                                if ($shouldScan) {
+                                    if ($endpoint.URL -notin $deviceInfo.ApiEndpoints) {
+                                        $deviceInfo.ApiEndpoints += $endpoint.URL
+                                        $tags = @()
+                                        if ($endpoint.IsOpenApi) { $tags += 'OpenAPI' }
+                                        if ($endpoint.IsSwaggerUI) { $tags += 'Swagger UI' }
+                                        if ($endpoint.IsOnvif) { $tags += 'ONVIF' }
+                                        if ($endpoint.IsIgnorableSoapFault) { $tags += 'SOAP Fault ignored' }
+                                        $tagStr = if ($tags.Count -gt 0) { ' ' + '[' + ($tags -join ', ') + ']' } else { '' }
+                                        $statusStr = if ($endpoint.StatusCode) { " [$($endpoint.StatusCode)]" } else { '' }
+                                        $ctypeStr = if ($endpoint.ContentType) { " [$($endpoint.ContentType)]" } else { '' }
+                                        Write-Host "            - $($endpoint.URL)$statusStr$ctypeStr$tagStr" -ForegroundColor Gray
+                                    }
+                                    $endpointResults += $endpoint
+                                } else {
+                                    Write-Host "            - $($endpoint.URL) [skipped, recent scan]" -ForegroundColor DarkGray
+                                }
+                            } catch {
+                                # fallback: always scan if error
+                                if ($endpoint.URL -notin $deviceInfo.ApiEndpoints) {
+                                    $deviceInfo.ApiEndpoints += $endpoint.URL
+                                }
+                                $endpointResults += $endpoint
                             }
-                            $endpointResults += $endpoint
-                        }
-                    }
-                }
-                if ($port -in @(443, 8443, 5001)) {
-                    $apiEndpoints = Get-ApiEndpoints -IPAddress $ip -Port $port -UseSSL
-                    if ($apiEndpoints.Count -gt 0) {
-                        foreach ($endpoint in $apiEndpoints) {
-                            if ($endpoint.URL -notin $deviceInfo.ApiEndpoints) {
-                                $deviceInfo.ApiEndpoints += $endpoint.URL
-                                $tags = @()
-                                if ($endpoint.IsOpenApi) { $tags += 'OpenAPI' }
-                                if ($endpoint.IsSwaggerUI) { $tags += 'Swagger UI' }
-                                if ($endpoint.IsOnvif) { $tags += 'ONVIF' }
-                                if ($endpoint.IsIgnorableSoapFault) { $tags += 'SOAP Fault ignored' }
-                                $tagStr = if ($tags.Count -gt 0) { ' ' + '[' + ($tags -join ', ') + ']' } else { '' }
-                                $statusStr = if ($endpoint.StatusCode) { " [$($endpoint.StatusCode)]" } else { '' }
-                                $ctypeStr = if ($endpoint.ContentType) { " [$($endpoint.ContentType)]" } else { '' }
-                                Write-Host "            - $($endpoint.URL)$statusStr$ctypeStr$tagStr" -ForegroundColor Gray
-                            }
-                            $endpointResults += $endpoint
                         }
                     }
                 }
