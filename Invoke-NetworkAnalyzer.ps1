@@ -53,6 +53,13 @@ param(
 $modulePath = Join-Path $PSScriptRoot "NetworkAnalyzer.psm1"
 Import-Module $modulePath -Force
 
+# Track scan start time and prepare output folder
+$scanStart = Get-Date
+$outputRoot = Join-Path $PSScriptRoot "output"
+if (-not (Test-Path -LiteralPath $outputRoot)) {
+    New-Item -ItemType Directory -Path $outputRoot | Out-Null
+}
+
 # Banner
 Write-Host "=================================================" -ForegroundColor Cyan
 Write-Host "    Network Analyzer - Device Discovery Tool    " -ForegroundColor Cyan
@@ -121,15 +128,15 @@ foreach ($subnet in $subnetsToScan) {
     Write-Host "    Found $($activeHosts.Count) active host(s)" -ForegroundColor Green
     
     # Step 3: Identify devices and scan ports
-    foreach ($host in $activeHosts) {
-        Write-Host "    [*] Analyzing $host..." -ForegroundColor Cyan
+    foreach ($ip in $activeHosts) {
+        Write-Host "    [*] Analyzing $ip..." -ForegroundColor Cyan
         
         $openPorts = @()
         $httpInfo = @()
         
         if (-not $SkipPortScan) {
             # Scan common ports
-            $openPorts = Get-OpenPorts -IPAddress $host -Verbose:$VerbosePreference
+            $openPorts = Get-OpenPorts -IPAddress $ip -Verbose:$VerbosePreference
             
             if ($openPorts.Count -gt 0) {
                 Write-Host "        Open ports: $($openPorts -join ', ')" -ForegroundColor Gray
@@ -137,13 +144,13 @@ foreach ($subnet in $subnetsToScan) {
                 # Check HTTP/HTTPS services
                 foreach ($port in $openPorts) {
                     if ($port -in @(80, 8080, 8081, 8123, 5000, 9000)) {
-                        $info = Get-HttpService -IPAddress $host -Port $port
+                        $info = Get-HttpService -IPAddress $ip -Port $port
                         if ($info.Success) {
                             $httpInfo += $info
                         }
                     }
                     if ($port -in @(443, 8443, 5001)) {
-                        $info = Get-HttpService -IPAddress $host -Port $port -UseSSL
+                        $info = Get-HttpService -IPAddress $ip -Port $port -UseSSL
                         if ($info.Success) {
                             $httpInfo += $info
                         }
@@ -153,7 +160,10 @@ foreach ($subnet in $subnetsToScan) {
         }
         
         # Identify device type
-        $deviceInfo = Get-DeviceType -IPAddress $host -OpenPorts $openPorts -HttpInfo $httpInfo
+        $deviceInfo = Get-DeviceType -IPAddress $ip -OpenPorts $openPorts -HttpInfo $httpInfo
+        if (-not $deviceInfo.PSObject.Properties.Match('ApiDetails')) {
+            $deviceInfo | Add-Member -NotePropertyName ApiDetails -NotePropertyValue @() -Force
+        }
         
         if ($deviceInfo.DeviceName) {
             Write-Host "        Device: $($deviceInfo.DeviceName) [$($deviceInfo.DeviceType)]" -ForegroundColor Green
@@ -175,28 +185,55 @@ foreach ($subnet in $subnetsToScan) {
         
         # Try to discover additional API endpoints
         if (-not $SkipPortScan -and $openPorts.Count -gt 0) {
+            $endpointResults = @()
             foreach ($port in $openPorts) {
                 if ($port -in @(80, 8080, 8081, 8123, 5000, 9000)) {
-                    $apiEndpoints = Get-ApiEndpoints -IPAddress $host -Port $port
+                    $apiEndpoints = Get-ApiEndpoints -IPAddress $ip -Port $port
                     if ($apiEndpoints.Count -gt 0) {
                         foreach ($endpoint in $apiEndpoints) {
                             if ($endpoint.URL -notin $deviceInfo.ApiEndpoints) {
                                 $deviceInfo.ApiEndpoints += $endpoint.URL
-                                Write-Host "            - $($endpoint.URL) [$($endpoint.ContentType)]" -ForegroundColor Gray
+                                $tags = @()
+                                if ($endpoint.IsOpenApi) { $tags += 'OpenAPI' }
+                                if ($endpoint.IsSwaggerUI) { $tags += 'Swagger UI' }
+                                if ($endpoint.IsOnvif) { $tags += 'ONVIF' }
+                                if ($endpoint.IsIgnorableSoapFault) { $tags += 'SOAP Fault ignored' }
+                                $tagStr = if ($tags.Count -gt 0) { ' ' + '[' + ($tags -join ', ') + ']' } else { '' }
+                                $statusStr = if ($endpoint.StatusCode) { " [$($endpoint.StatusCode)]" } else { '' }
+                                $ctypeStr = if ($endpoint.ContentType) { " [$($endpoint.ContentType)]" } else { '' }
+                                Write-Host "            - $($endpoint.URL)$statusStr$ctypeStr$tagStr" -ForegroundColor Gray
                             }
+                            $endpointResults += $endpoint
                         }
                     }
                 }
                 if ($port -in @(443, 8443, 5001)) {
-                    $apiEndpoints = Get-ApiEndpoints -IPAddress $host -Port $port -UseSSL
+                    $apiEndpoints = Get-ApiEndpoints -IPAddress $ip -Port $port -UseSSL
                     if ($apiEndpoints.Count -gt 0) {
                         foreach ($endpoint in $apiEndpoints) {
                             if ($endpoint.URL -notin $deviceInfo.ApiEndpoints) {
                                 $deviceInfo.ApiEndpoints += $endpoint.URL
-                                Write-Host "            - $($endpoint.URL) [$($endpoint.ContentType)]" -ForegroundColor Gray
+                                $tags = @()
+                                if ($endpoint.IsOpenApi) { $tags += 'OpenAPI' }
+                                if ($endpoint.IsSwaggerUI) { $tags += 'Swagger UI' }
+                                if ($endpoint.IsOnvif) { $tags += 'ONVIF' }
+                                if ($endpoint.IsIgnorableSoapFault) { $tags += 'SOAP Fault ignored' }
+                                $tagStr = if ($tags.Count -gt 0) { ' ' + '[' + ($tags -join ', ') + ']' } else { '' }
+                                $statusStr = if ($endpoint.StatusCode) { " [$($endpoint.StatusCode)]" } else { '' }
+                                $ctypeStr = if ($endpoint.ContentType) { " [$($endpoint.ContentType)]" } else { '' }
+                                Write-Host "            - $($endpoint.URL)$statusStr$ctypeStr$tagStr" -ForegroundColor Gray
                             }
+                            $endpointResults += $endpoint
                         }
                     }
+                }
+            }
+            if ($endpointResults.Count -gt 0) {
+                $deviceInfo.ApiDetails = $endpointResults
+                if ($deviceInfo.DeviceType -in @('Unknown','Web Server')) {
+                    $inferred = Infer-DeviceTypeFromApi -ApiDetails $endpointResults
+                    if ($inferred.DeviceType) { $deviceInfo.DeviceType = $inferred.DeviceType }
+                    if ($inferred.DeviceName) { $deviceInfo.DeviceName = $inferred.DeviceName }
                 }
             }
         }
@@ -231,9 +268,30 @@ if ($devicesWithApis.Count -gt 0) {
     Write-Host ""
     Write-Host "Devices with API endpoints: $($devicesWithApis.Count)" -ForegroundColor Green
     foreach ($device in $devicesWithApis) {
-        Write-Host "  $($device.IPAddress) - $($device.DeviceName)" -ForegroundColor Cyan
-        foreach ($endpoint in $device.ApiEndpoints) {
-            Write-Host "    - $endpoint" -ForegroundColor Gray
+        $hasName = [string]::IsNullOrWhiteSpace($device.DeviceName) -eq $false
+        $hasHost = [string]::IsNullOrWhiteSpace($device.Hostname) -eq $false
+        $label = if ($hasName -and $hasHost) { "$($device.DeviceName) ($($device.Hostname))" }
+                 elseif ($hasName) { $device.DeviceName }
+                 elseif ($hasHost) { $device.Hostname }
+                 else { "Unknown" }
+        Write-Host "  $($device.IPAddress) - $label" -ForegroundColor Cyan
+        if ($device.PSObject.Properties.Match('ApiDetails')) {
+            foreach ($detail in $device.ApiDetails) {
+                $tags = @()
+                if ($detail.IsOpenApi) { $tags += 'OpenAPI' }
+                if ($detail.IsSwaggerUI) { $tags += 'Swagger UI' }
+                if ($detail.IsOnvif) { $tags += 'ONVIF' }
+                if ($detail.IsIgnorableSoapFault) { $tags += 'SOAP Fault ignored' }
+                $tagStr = if ($tags.Count -gt 0) { ' ' + '[' + ($tags -join ', ') + ']' } else { '' }
+                $statusStr = if ($detail.StatusCode) { " [$($detail.StatusCode)]" } else { '' }
+                $ctypeStr = if ($detail.ContentType) { " [$($detail.ContentType)]" } else { '' }
+                Write-Host "    - $($detail.URL)$statusStr$ctypeStr$tagStr" -ForegroundColor Gray
+            }
+        }
+        else {
+            foreach ($endpoint in $device.ApiEndpoints) {
+                Write-Host "    - $endpoint" -ForegroundColor Gray
+            }
         }
     }
 }
@@ -254,5 +312,135 @@ if ($OutputPath) {
     Write-Host "[+] Results saved successfully" -ForegroundColor Green
 }
 
+# Step 6: Write per-device output to /output
+foreach ($device in $allDevices) {
+    $nameParts = @()
+    if ($device.DeviceName) { $nameParts += $device.DeviceName }
+    if ($device.Hostname) { $nameParts += $device.Hostname }
+    $nameLabel = if ($nameParts.Count -gt 0) { $nameParts -join " - " } else { "Unknown" }
+    $folderName = "${($device.IPAddress)} - ${nameLabel}"
+    $safeFolder = ($folderName -replace '[<>:"/\\\|\?\*]', '_').Trim()
+    $deviceDir = Join-Path $outputRoot $safeFolder
+    if (-not (Test-Path -LiteralPath $deviceDir)) { New-Item -ItemType Directory -Path $deviceDir | Out-Null }
+
+    # Write slim device object (exclude RawContent/Snippet from ApiDetails)
+    $deviceSlim = [PSCustomObject]@{
+        IPAddress = $device.IPAddress
+        Hostname = $device.Hostname
+        DeviceType = $device.DeviceType
+        DeviceName = $device.DeviceName
+        OpenPorts = $device.OpenPorts
+        ApiEndpoints = $device.ApiEndpoints
+        ApiDetails = @()
+    }
+    if ($device.PSObject.Properties.Match('ApiDetails') -and $device.ApiDetails.Count -gt 0) {
+        $deviceSlim.ApiDetails = @()
+        foreach ($d in $device.ApiDetails) {
+            $deviceSlim.ApiDetails += [PSCustomObject]@{
+                URL = $d.URL
+                StatusCode = $d.StatusCode
+                ContentType = $d.ContentType
+                Server = $d.Server
+                Title = $d.Title
+                IsJson = $d.IsJson
+                JsonKeys = $d.JsonKeys
+                IsSwaggerUI = $d.IsSwaggerUI
+                IsOpenApi = $d.IsOpenApi
+                IsOnvif = $d.IsOnvif
+            }
+        }
+    }
+    ($deviceSlim | ConvertTo-Json -Depth 10) | Out-File -FilePath (Join-Path $deviceDir 'device.json') -Encoding UTF8
+
+    # Write endpoint contents when available
+    if ($device.PSObject.Properties.Match('ApiDetails') -and $device.ApiDetails.Count -gt 0) {
+        $epDir = Join-Path $deviceDir 'endpoints'
+        if (-not (Test-Path -LiteralPath $epDir)) { New-Item -ItemType Directory -Path $epDir | Out-Null }
+        foreach ($detail in $device.ApiDetails) {
+            try {
+                $u = [uri]$detail.URL
+                $absPath = $u.AbsolutePath.Trim('/')
+                $segments = @()
+                if (-not [string]::IsNullOrWhiteSpace($absPath)) { $segments = $absPath.Split('/') }
+                $lastSeg = ($segments | Where-Object { $_ -ne '' } | Select-Object -Last 1)
+                if ([string]::IsNullOrWhiteSpace($lastSeg)) { $lastSeg = 'root' }
+                $segSan = $lastSeg -replace '[^a-zA-Z0-9._-]', '_'
+                # Include port to avoid collisions across http/https
+                $fileBase = "${($u.Port)}_${segSan}"
+                $ext = '.txt'
+                if ($detail.IsJson -or ($detail.ContentType -match 'json')) { $ext = '.json' }
+                elseif ($detail.ContentType -match 'xml' -or ($detail.Snippet -match '<Envelope')) { $ext = '.xml' }
+                elseif ($detail.ContentType -match 'html') { $ext = '.html' }
+                $contentPath = Join-Path $epDir ($fileBase + $ext)
+
+                # Only write XML file if not an ignorable SOAP fault
+                if ($ext -eq '.xml' -and $detail.IsIgnorableSoapFault) {
+                    # Remove any old XML file for this endpoint if it exists
+                    if (Test-Path -LiteralPath $contentPath) {
+                        Remove-Item -LiteralPath $contentPath -Force -ErrorAction SilentlyContinue
+                    }
+                    # Suppress writing XML file for ignorable SOAP fault
+                }
+                elseif (-not $detail.IsIgnorableSoapFault -and $detail.RawContent) {
+                    if ($ext -eq '.json') {
+                        try {
+                            ($detail.RawContent | ConvertFrom-Json | ConvertTo-Json -Depth 50) | Out-File -FilePath $contentPath -Encoding UTF8
+                        }
+                        catch {
+                            $detail.RawContent | Out-File -FilePath $contentPath -Encoding UTF8
+                        }
+                    }
+                    elseif ($ext -eq '.xml') {
+                        try {
+                            $xmlDoc = New-Object System.Xml.XmlDocument
+                            $xmlDoc.LoadXml($detail.RawContent)
+                            $settings = New-Object System.Xml.XmlWriterSettings
+                            $settings.Indent = $true
+                            $settings.NewLineOnAttributes = $false
+                            $writer = [System.Xml.XmlWriter]::Create($contentPath, $settings)
+                            $xmlDoc.Save($writer)
+                            $writer.Close()
+                        }
+                        catch {
+                            $detail.RawContent | Out-File -FilePath $contentPath -Encoding UTF8
+                        }
+                    }
+                    else {
+                        $detail.RawContent | Out-File -FilePath $contentPath -Encoding UTF8
+                    }
+                }
+                elseif (-not $detail.IsIgnorableSoapFault -and $detail.Snippet) {
+                    $detail.Snippet | Out-File -FilePath $contentPath -Encoding UTF8
+                }
+
+                # Write metadata sidecar with LastUpdated timestamp
+                $meta = [PSCustomObject]@{
+                    URL = $detail.URL
+                    StatusCode = $detail.StatusCode
+                    ContentType = $detail.ContentType
+                    Server = $detail.Server
+                    Title = $detail.Title
+                    IsJson = $detail.IsJson
+                    JsonKeys = $detail.JsonKeys
+                    IsSwaggerUI = $detail.IsSwaggerUI
+                    IsOpenApi = $detail.IsOpenApi
+                    IsOnvif = $detail.IsOnvif
+                    IsSoapFault = $detail.IsSoapFault
+                    IsIgnorableSoapFault = $detail.IsIgnorableSoapFault
+                    LastUpdated = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+                }
+                ($meta | ConvertTo-Json -Depth 10) | Out-File -FilePath (Join-Path $epDir ($fileBase + '.meta.json')) -Encoding UTF8
+            }
+            catch { }
+        }
+    }
+}
+
 Write-Host ""
-Write-Host "Scan completed at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Cyan
+$scanEnd = Get-Date
+$duration = ($scanEnd - $scanStart)
+$durationStr = [string]::Format('{0:00}:{1:00}:{2:00}', [int]$duration.Hours, [int]$duration.Minutes, [int]$duration.Seconds)
+Write-Host "Scan completed at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') in $durationStr" -ForegroundColor Cyan
+
+# Ensure clean termination of the script in interactive runs
+return

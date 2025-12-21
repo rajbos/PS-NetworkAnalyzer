@@ -24,20 +24,37 @@ function Get-LocalSubnets {
         
         # Skip loopback
         if ($ip -eq "127.0.0.1") { continue }
+        # Skip invalid prefix lengths
+        if ($prefixLength -lt 0 -or $prefixLength -gt 32) { continue }
         
         # Calculate network address
         $ipBytes = [System.Net.IPAddress]::Parse($ip).GetAddressBytes()
-        # Create subnet mask using bitwise operation
-        $maskValue = [uint32](0xFFFFFFFF -shl (32 - $prefixLength))
-        $maskBytes = [System.BitConverter]::GetBytes($maskValue)
-        [Array]::Reverse($maskBytes)
         
+        # Create subnet mask bytes safely without negative shifts
+        # Compute, per octet, how many bits belong to the network portion
+        $maskBytes = New-Object 'System.Byte[]' 4
+        for ($i = 0; $i -lt 4; $i++) {
+            $bits = [math]::Min([math]::Max($prefixLength - (8 * $i), 0), 8)
+            if ($bits -le 0) {
+                $maskBytes[$i] = [byte]0
+            }
+            elseif ($bits -ge 8) {
+                $maskBytes[$i] = [byte]255
+            }
+            else {
+                # Left shift within byte and mask to 8 bits
+                $maskBytes[$i] = [byte]((0xFF -shl (8 - $bits)) -band 0xFF)
+            }
+        }
+
         $networkBytes = @(0, 0, 0, 0)
         for ($i = 0; $i -lt 4; $i++) {
             $networkBytes[$i] = $ipBytes[$i] -band $maskBytes[$i]
         }
         
         $networkAddress = [System.Net.IPAddress]::new($networkBytes).ToString()
+        # Skip invalid network address results
+        if ($networkAddress -eq "0.0.0.0") { continue }
         
         $subnets += [PSCustomObject]@{
             InterfaceAlias = $adapter.InterfaceAlias
@@ -284,32 +301,8 @@ function Get-HttpService {
     $url = "${protocol}://${IPAddress}:${Port}"
     
     try {
-        # Ignore SSL certificate errors for self-signed certificates
-        # SECURITY WARNING: This disables SSL certificate validation globally
-        # Only use this in trusted network environments for device discovery
-        if (-not ([System.Management.Automation.PSTypeName]'ServerCertificateValidationCallback').Type) {
-            Add-Type @"
-                using System.Net;
-                using System.Net.Security;
-                using System.Security.Cryptography.X509Certificates;
-                public class ServerCertificateValidationCallback {
-                    public static void Ignore() {
-                        ServicePointManager.ServerCertificateValidationCallback += 
-                            delegate (
-                                Object obj, 
-                                X509Certificate certificate, 
-                                X509Chain chain, 
-                                SslPolicyErrors errors
-                            ) {
-                                return true;
-                            };
-                    }
-                }
-"@
-        }
-        [ServerCertificateValidationCallback]::Ignore()
-        
-        $response = Invoke-WebRequest -Uri $url -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
+        # Use PowerShell's built-in certificate skipping option for HTTPS
+        $response = Invoke-WebRequest -Uri $url -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop -SkipCertificateCheck:$UseSSL
         
         return [PSCustomObject]@{
             URL = $url
@@ -352,7 +345,10 @@ function Get-DeviceType {
         [int[]]$OpenPorts = @(),
         
         [Parameter(Mandatory = $false)]
-        [object[]]$HttpInfo = @()
+        [object[]]$HttpInfo = @(),
+
+        [Parameter(Mandatory = $false)]
+        [object[]]$ApiDetails = @()
     )
     
     $deviceType = "Unknown"
@@ -430,6 +426,7 @@ function Get-DeviceType {
         DeviceName = $deviceName
         OpenPorts = $OpenPorts
         ApiEndpoints = $apiEndpoints
+        ApiDetails = $ApiDetails
     }
 }
 
@@ -478,24 +475,136 @@ function Get-ApiEndpoints {
     )
     
     foreach ($path in $commonPaths) {
+        $url = "$baseUrl$path"
         try {
-            $url = "$baseUrl$path"
-            $response = Invoke-WebRequest -Uri $url -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop
-            
-            if ($response.StatusCode -eq 200) {
-                $endpoints += [PSCustomObject]@{
-                    URL = $url
-                    StatusCode = $response.StatusCode
-                    ContentType = $response.Headers['Content-Type'] -join ','
-                }
-            }
+            $response = Invoke-WebRequest -Uri $url -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop -SkipCertificateCheck:$UseSSL -MaximumRedirection 2
+            $status = $response.StatusCode
+            $ctype = ($response.Headers['Content-Type'] -join ',')
+            $server = ($response.Headers['Server'] -join ',')
+            $raw = $response.Content
         }
         catch {
-            # Endpoint not available, skip
+            # Still capture non-200 if available (e.g., 401 Unauthorized with useful headers)
+            $err = $_.Exception
+            $status = $null
+            $ctype = $null
+            $server = $null
+            $raw = $null
+        }
+
+        # Only record if reachable or provided a response
+        if ($status) {
+            $snippet = $null
+            $isJson = $false
+            $jsonKeys = @()
+            $isSwaggerUI = $false
+            $isOpenApi = $false
+            $isOnvif = $false
+            $isSoapFault = $false
+            $isIgnorableSoapFault = $false
+            $title = $null
+
+            if ($raw) {
+                $snippet = if ($raw.Length -gt 512) { $raw.Substring(0,512) } else { $raw }
+
+                # HTML title
+                if ($snippet -match '<title>(.*?)</title>') { $title = $matches[1] }
+
+                # JSON detection
+                if ($ctype -match 'application/(json|.*\+json)' -or ($snippet -match '^\s*[{\[]')) {
+                    try {
+                        $json = $raw | ConvertFrom-Json -ErrorAction Stop
+                        $isJson = $true
+                        if ($json -is [System.Collections.IDictionary]) {
+                            $jsonKeys = @($json.Keys) | Select-Object -First 10
+                        }
+                        elseif ($json -is [System.Collections.IEnumerable]) {
+                            $first = ($json | Select-Object -First 1)
+                            if ($first -and $first.PSObject.Properties.Name.Count -gt 0) {
+                                $jsonKeys = @($first.PSObject.Properties.Name) | Select-Object -First 10
+                            }
+                        }
+                        # OpenAPI detection
+                        if ($json.openapi) { $isOpenApi = $true }
+                        if ($json.swagger) { $isOpenApi = $true }
+                    }
+                    catch { }
+                }
+
+                # Swagger UI detection
+                if ($snippet -match 'Swagger UI' -or $snippet -match 'id="swagger-ui"') { $isSwaggerUI = $true }
+
+                # ONVIF/SOAP detection
+                if (($ctype -match 'application/soap\+xml') -or ($snippet -match '<(s:Envelope|SOAP-ENV:Envelope|Envelope)')) {
+                    if ($snippet -match 'onvif' -or $snippet -match 'www\.onvif\.org') { $isOnvif = $true }
+                    if ($snippet -match '<(s:Fault|SOAP-ENV:Fault|Fault)') { $isSoapFault = $true }
+                    if ($snippet -match 'End of file or no input: message transfer interrupted') { $isIgnorableSoapFault = $true }
+                }
+            }
+
+            # Suppress saving noisy SOAP fault content
+            if ($isIgnorableSoapFault) {
+                $raw = $null
+                $snippet = $null
+            }
+
+            $endpoints += [PSCustomObject]@{
+                URL = $url
+                StatusCode = $status
+                ContentType = $ctype
+                Server = $server
+                Title = $title
+                IsJson = $isJson
+                JsonKeys = $jsonKeys
+                IsSwaggerUI = $isSwaggerUI
+                IsOpenApi = $isOpenApi
+                IsOnvif = $isOnvif
+                Snippet = $snippet
+                RawContent = $raw
+                IsSoapFault = $isSoapFault
+                IsIgnorableSoapFault = $isIgnorableSoapFault
+            }
         }
     }
-    
+
     return $endpoints
 }
 
-Export-ModuleMember -Function Get-LocalSubnets, Test-HostAlive, Get-NetworkHosts, Test-TCPPort, Get-OpenPorts, Get-HttpService, Get-DeviceType, Get-ApiEndpoints
+function Infer-DeviceTypeFromApi {
+    <#
+    .SYNOPSIS
+    Infer device type/name from analyzed API endpoint details
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object[]]$ApiDetails
+    )
+
+    $deviceType = $null
+    $deviceName = $null
+
+    if ($ApiDetails | Where-Object { $_.IsOnvif }) {
+        $deviceType = "Network/Security Device"
+        $deviceName = "ONVIF Camera/NVR"
+        return @{ DeviceType = $deviceType; DeviceName = $deviceName }
+    }
+
+    if ($ApiDetails | Where-Object { $_.IsOpenApi -or $_.IsSwaggerUI }) {
+        $deviceType = "Web Server"
+        $deviceName = "OpenAPI Service"
+        return @{ DeviceType = $deviceType; DeviceName = $deviceName }
+    }
+
+    # Fallback: if many JSON endpoints exist, likely a generic web API service
+    $jsonCount = ($ApiDetails | Where-Object { $_.IsJson }).Count
+    if ($jsonCount -ge 2) {
+        $deviceType = "Web Server"
+        $deviceName = $null
+        return @{ DeviceType = $deviceType; DeviceName = $deviceName }
+    }
+
+    return @{ DeviceType = $null; DeviceName = $null }
+}
+
+Export-ModuleMember -Function Get-LocalSubnets, Test-HostAlive, Get-NetworkHosts, Test-TCPPort, Get-OpenPorts, Get-HttpService, Get-DeviceType, Get-ApiEndpoints, Infer-DeviceTypeFromApi
